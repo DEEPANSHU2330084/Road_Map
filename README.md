@@ -1,4 +1,4 @@
-# DSA Roadmap Graph v6
+# Graph v6
 
 - Direct node-to-node linking with ↗.
 - Move mode with ✥: click it, then drag the node anywhere on the canvas.
