@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase";
 import {
   Plus, Search, Settings, X, Check, Trash2, ExternalLink,
-  ChevronLeft, Link2, Unlink2, Folder, FileText, Move
+  ChevronLeft, Link2, Unlink2, Folder, FileText, Move, Palette, LayoutDashboard,
+  Maximize2, Minimize2, LogOut, ChevronDown, Home, Map as MapIcon, CalendarDays, Code2, NotebookPen, BarChart3, Sun
 } from "lucide-react";
 import { starterTree, aptitudeTree } from "./data";
 import {
@@ -18,6 +19,12 @@ function normalizeTree(t, fallbackName) {
   if (tree.id === "root" && tree.name === "DSA Roadmap") tree.name = "DSA";
   tree.name = tree.name || fallbackName;
   if (!Array.isArray(tree.links)) tree.links = [];
+  if (!tree.settings) tree.settings = {};
+  tree.settings.layout = tree.settings.layout || "balanced";
+  tree.settings.nodeStyle = tree.settings.nodeStyle || (tree.name.toLowerCase().includes("aptitude") ? "aptitude" : "coding");
+  tree.settings.accent = tree.settings.accent || (tree.name.toLowerCase().includes("aptitude") ? "amber" : "violet");
+  tree.settings.problemSet = tree.settings.problemSet || (tree.name.toLowerCase().includes("aptitude") ? "My Custom Set" : "NeetCode 150");
+  tree.settings.showDescriptions = tree.settings.showDescriptions ?? true;
   return tree;
 }
 
@@ -42,39 +49,41 @@ function loadRoadmaps() {
   };
 }
 
-function NodeCard({ node, x, y, onOpen, onAdd, onLinkStart, onMoveStart, onDelete, linkingFrom, movingId }) {
+function NodeCard({ node, x, y, settings, onOpen, onAdd, onLinkStart, onMoveStart, onDelete, linkingFrom, movingId }) {
   const progress = node.type === "page" ? progressOf(node) : 0;
+  const style = node.nodeStyle || settings?.nodeStyle || "coding";
+  const isRoot = node.id === "root";
+  const subtitle = settings?.showDescriptions ? (node.description || (node.type === "page" ? "Practice & problems" : isRoot ? "Master roadmap" : "Topic")) : "";
   return (
-    <g className={`road-node ${movingId === node.id ? "moving-node" : ""}`} transform={`translate(${x}, ${y})`} onClick={() => onOpen(node)} onPointerDown={(e) => { if (movingId === node.id) { e.stopPropagation(); onMoveStart(node, e); } }}>
-      <rect className="node-box" x="-88" y="-29" width="176" height="58" rx="10" />
-      <text className="node-title" x="0" y="-3" textAnchor="middle">{node.name}</text>
-      <rect className="progress-bg" x="-75" y="12" width="150" height="4" rx="2" />
-      {progress > 0 && (
-        <rect className="progress-fill" x="-75" y="12" width={150 * progress / 100} height="4" rx="2" />
-      )}
-      {node.type === "page" && <circle className="page-dot" cx="68" cy="-15" r="4" />}
+    <g className={`road-node node-style-${style} ${isRoot ? "root-node" : ""} ${movingId === node.id ? "moving-node" : ""}`}
+       transform={`translate(${x}, ${y})`} onClick={() => onOpen(node)}
+       onPointerDown={(e) => { if (movingId === node.id) { e.stopPropagation(); onMoveStart(node, e); } }}>
+      <rect className="node-box" x="-104" y="-34" width="208" height="68" rx="12" />
+      <text className="node-title" x="0" y={settings?.showDescriptions ? "-7" : "2"} textAnchor="middle">{node.name}</text>
+      {settings?.showDescriptions && <text className="node-subtitle" x="0" y="12" textAnchor="middle">{subtitle}</text>}
+      <rect className="progress-bg" x="-88" y="23" width="176" height="4" rx="2" />
+      {progress > 0 && <rect className="progress-fill" x="-88" y="23" width={176 * progress / 100} height="4" rx="2" />}
+      {node.type === "page" && <circle className="page-dot" cx="84" cy="-19" r="4" />}
       <g className={`node-add ${linkingFrom === node.id ? "selected-link" : ""}`} onClick={(e) => { e.stopPropagation(); onAdd(node); }}>
-        <circle cx="86" cy="-29" r="11" />
-        <text x="86" y="-24" textAnchor="middle">+</text>
+        <circle cx="100" cy="-34" r="12" /><text x="100" y="-29" textAnchor="middle">+</text>
       </g>
       <g className={`node-link ${linkingFrom === node.id ? "selected-link" : ""}`} onClick={(e) => { e.stopPropagation(); onLinkStart(node); }}>
-        <circle cx="69" cy="-29" r="11" />
-        <text x="69" y="-24" textAnchor="middle">↗</text>
+        <circle cx="80" cy="-34" r="12" /><text x="80" y="-29" textAnchor="middle">↗</text>
       </g>
       <g className={`node-move ${movingId === node.id ? "selected-move" : ""}`} onClick={(e) => { e.stopPropagation(); onMoveStart(node); }}>
-        <circle cx="52" cy="-29" r="11" />
-        <text x="52" y="-24" textAnchor="middle">✥</text>
+        <circle cx="60" cy="-34" r="12" /><text x="60" y="-29" textAnchor="middle">✥</text>
       </g>
       <g className="node-delete" onClick={(e) => { e.stopPropagation(); onDelete(node); }}>
-        <circle cx="35" cy="-29" r="11" />
-        <Trash2 x="28" y="-36" width="14" height="14" />
+        <circle cx="40" cy="-34" r="12" /><Trash2 x="33" y="-41" width="14" height="14" />
       </g>
     </g>
   );
 }
 
 function layoutGraph(root) {
-  const gap = 230;
+  const settings = root.settings || {};
+  const gap = settings.layout === "compact" ? 190 : settings.layout === "wide" ? 300 : 240;
+  const levelGap = settings.layout === "compact" ? 105 : settings.layout === "wide" ? 145 : 125;
   let cursor = 0;
 
   function assign(node, depth) {
@@ -86,7 +95,7 @@ function layoutGraph(root) {
       children.forEach(c => assign(c, depth + 1));
       node.__x = (children[0].__x + children[children.length - 1].__x) / 2;
     }
-    node.__y = 90 + Math.max(0, depth) * 120;
+    node.__y = 105 + Math.max(0, depth) * levelGap;
   }
 
   // Keep the main DSA root visible at the top of the roadmap.
@@ -141,13 +150,16 @@ function layoutGraph(root) {
     nodes: visible,
     treeEdges: visibleEdges,
     links,
-    width: Math.max(1100, maxX - minX + 450),
+    width: Math.max(1350, maxX - minX + 560),
     height: Math.max(760, visible.reduce((m, n) => Math.max(m, n.y), 0) + 190)
   };
 }
 
 function RoadmapApp({ initialRoadmaps, initialActiveId, onRoadmapsChange, onActiveRoadmapChange }) {
-  const [roadmaps, setRoadmaps] = useState(() => initialRoadmaps || loadRoadmaps());
+  const [roadmaps, setRoadmaps] = useState(() => {
+    const raw = initialRoadmaps || loadRoadmaps();
+    return Object.fromEntries(Object.entries(raw).map(([id, value]) => [id, normalizeTree(value, value?.name || id)]));
+  });
   const [roadmapId, setRoadmapId] = useState(() => initialActiveId || localStorage.getItem("roadmap-active-id") || "dsa");
   const tree = roadmaps[roadmapId] || roadmaps.dsa;
   const [selected, setSelected] = useState(null);
@@ -185,10 +197,22 @@ function RoadmapApp({ initialRoadmaps, initialActiveId, onRoadmapsChange, onActi
 
   const addRoadmap = name => {
     const id = makeId();
-    const newTree = { id: "root", name, type: "folder", children: [], links: [] };
+    const lower = name.toLowerCase();
+    const newTree = { id: "root", name, type: "folder", children: [], links: [], settings: {
+      layout: "balanced",
+      nodeStyle: lower.includes("aptitude") ? "aptitude" : lower.includes("coding") || lower.includes("dsa") ? "coding" : "classic",
+      accent: lower.includes("aptitude") ? "amber" : "violet",
+      problemSet: lower.includes("aptitude") ? "My Custom Set" : "NeetCode 150",
+      showDescriptions: true
+    }};
     setRoadmaps(prev => ({ ...prev, [id]: newTree }));
     setRoadmapId(id);
     setSelected(null);
+    setModal(null);
+  };
+
+  const saveRoadmapSettings = settings => {
+    setTree(t => ({ ...t, settings: { ...(t.settings || {}), ...settings } }));
     setModal(null);
   };
 
@@ -221,8 +245,8 @@ function RoadmapApp({ initialRoadmaps, initialActiveId, onRoadmapsChange, onActi
     setModal(null);
   };
 
-  const editNode = (id, name) => {
-    setTree(t => updateNode(t, id, n => ({ ...n, name })));
+  const editNode = (id, patch) => {
+    setTree(t => updateNode(t, id, n => ({ ...n, ...patch })));
     setModal(null);
   };
 
@@ -286,6 +310,7 @@ function RoadmapApp({ initialRoadmaps, initialActiveId, onRoadmapsChange, onActi
     return (
       <PageView
         node={currentPage}
+        roadmapSettings={tree.settings || {}}
         allNodes={collectNodes(tree)}
         onBack={() => setSelected(null)}
         onUpdate={(id, updater) => setTree(t => updateNode(t, id, updater))}
@@ -301,83 +326,54 @@ function RoadmapApp({ initialRoadmaps, initialActiveId, onRoadmapsChange, onActi
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark">{tree.name.slice(0,3).toUpperCase()}</div>
-          <div>
-            <strong>{tree.name} Roadmap</strong>
-            <span>{stats.solved}/{stats.total} problems solved</span>
-          </div>
+          <div className={`brand-mark accent-${tree.settings?.accent || "violet"}`}>{tree.name.slice(0,3).toUpperCase()}</div>
+          <div className="brand-copy"><strong>My Study Roadmap</strong><span>Personal learning workspace</span></div>
+        </div>
+        <div className="roadmap-tabs">
+          {Object.entries(roadmaps).slice(0,4).map(([id, r]) => <button key={id} className={roadmapId===id?"active":""} onClick={()=>changeRoadmap(id)}>{r.name}</button>)}
+          {Object.keys(roadmaps).length>4 ? <select value={roadmapId} onChange={e=>changeRoadmap(e.target.value)}><option value="">Custom</option>{Object.entries(roadmaps).slice(4).map(([id,r])=><option key={id} value={id}>{r.name}</option>)}</select> : <button className="custom-tab" onClick={()=>setModal({kind:"roadmap-add"})}>Custom <ChevronDown size={13}/></button>}
         </div>
         <div className="top-actions">
-          <div className="roadmap-switcher">
-            <span>Roadmap</span>
-            <select value={roadmapId} onChange={e => changeRoadmap(e.target.value)}>
-              {Object.entries(roadmaps).map(([id, r]) => <option key={id} value={id}>{r.name}</option>)}
-            </select>
-            <button className="add-roadmap-btn" title="Create another roadmap" onClick={() => setModal({kind:"roadmap-add"})}>+</button>
-          </div>
-          <div className="search">
-            <Search size={16}/>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search topic..."/>
-          </div>
-          <button className="icon-btn" title="Reset zoom" onClick={() => setZoom(1)}><Settings size={17}/></button>
+          <div className="search"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search nodes..."/></div>
+          <button className="top-control" onClick={()=>setZoom(1)}><Maximize2 size={16}/> Fit view</button>
+          <button className="icon-theme" title="Theme"><Sun size={17}/></button>
+          <div className="profile-pill"><span>T</span><b>Tenchi Wilferd</b><ChevronDown size={13}/></div>
         </div>
       </header>
 
-      <main className="canvas">
-        <div className="hint">
-          {linkingFrom ? <>
-            <span className="linking-message">Link mode: <b>{findNode(tree, linkingFrom)?.name}</b> selected — now click any other topic</span>
-            <button className="cancel-link" onClick={() => setLinkingFrom(null)}><X size={13}/> Cancel</button>
-          </> : <>
-            <span>Click a <b>PAGE</b> node to open it</span><span>•</span>
-            <span><b>+</b> adds a child</span><span>•</span>
-            <span><b>↗</b> links two topics</span><span>•</span>
-            <span><b>✥</b> then drag a node to move it</span>
-          </>}
-        </div>
+      <main className={`canvas layout-${tree.settings?.layout || "balanced"}`}>
+        <aside className="left-sidebar">
+          <div className="sidebar-nav">
+            {[
+              [Home,"Home",true], [MapIcon,"Roadmap"], [CalendarDays,"Daily Plan"], [Code2,"Problems"], [NotebookPen,"Notes"], [BarChart3,"Analytics"]
+            ].map(([Icon,label,active]) => <button key={label} className={active?"active":""} onClick={()=>{ if(label==="Daily Plan") document.querySelector('.daily-planner')?.scrollIntoView({behavior:'smooth',block:'center'}); }}><Icon size={17}/><span>{label}</span></button>)}
+          </div>
+          <button className="sidebar-settings" onClick={()=>setModal({kind:"settings"})}><Settings size={17}/><span>Settings</span></button>
+        </aside>
 
-        <DailyPlanner
-          tree={tree}
-          topics={collectNodes(tree)}
-          onUpdate={(updater) => setTree(updater)}
-        />
+        <section className="graph-stage">
+          <div className="stage-head">
+            <div><span>ROADMAP</span><h2>{tree.name}</h2><p>Build your path step by step. Hover a node for actions.</p></div>
+            <div className="stage-actions"><button onClick={()=>setModal({kind:"settings"})}><Palette size={16}/> Layout</button><button onClick={()=>setModal({kind:"add",parent:tree})}><Plus size={16}/> Add node</button><button onClick={()=>setZoom(1)}><Maximize2 size={16}/> Fit</button></div>
+          </div>
+          <div className="hint">
+            {linkingFrom ? <><span className="linking-message">Link mode: <b>{findNode(tree, linkingFrom)?.name}</b> selected — click another topic</span><button className="cancel-link" onClick={() => setLinkingFrom(null)}><X size={14}/> Cancel</button></> : <><span><b>PAGE</b> opens dashboard</span><span>•</span><span><b>+</b> adds child</span><span>•</span><span><b>↗</b> cross-links topics</span><span>•</span><span><b>✥</b> moves node</span></>}
+          </div>
+          <div className="graph-viewport">
+            <svg className="graph" width={graph.width} height={graph.height} viewBox={`${-graph.width/2} 0 ${graph.width} ${graph.height}`} style={{transform:`scale(${zoom})`}}>
+              <defs><filter id="glow"><feGaussianBlur stdDeviation="2.2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+              {graph.treeEdges.map((edge, i) => { const x1=edge.parent.x,y1=edge.parent.y+34,x2=edge.child.x,y2=edge.child.y-34,mid=(y1+y2)/2; return <path key={"t"+i} className="edge" d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`}/>; })}
+              {graph.links.map((link,i)=>{const x1=link.from.x,y1=link.from.y,x2=link.to.x,y2=link.to.y,dx=(x2-x1)*.35;return <path key={"l"+i} className="cross-edge" d={`M ${x1} ${y1} C ${x1+dx} ${y1-35}, ${x2-dx} ${y2+35}, ${x2} ${y2}`}/>;})}
+              {filteredNodes.map(({node,x,y}) => <NodeCard key={node.id} node={node} x={x} y={y} settings={tree.settings} onOpen={openNode} onAdd={parent=>setModal({kind:"add",parent})} onLinkStart={startLink} onMoveStart={startMove} onDelete={node=>setModal({kind:"delete",node})} linkingFrom={linkingFrom} movingId={movingId}/>)}
+            </svg>
+          </div>
+        </section>
 
-        <div className="graph-viewport">
-          <svg className="graph" width={graph.width} height={graph.height}
-               viewBox={`${-graph.width/2} 0 ${graph.width} ${graph.height}`}
-               style={{transform:`scale(${zoom})`}}>
-            <defs>
-              <filter id="glow"><feGaussianBlur stdDeviation="2.2" result="blur"/>
-                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            </defs>
-
-            {graph.treeEdges.map((edge, i) => {
-              const x1=edge.parent.x, y1=edge.parent.y+29, x2=edge.child.x, y2=edge.child.y-29;
-              const mid=(y1+y2)/2;
-              return <path key={"t"+i} className="edge"
-                d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`}/>;
-            })}
-
-            {graph.links.map((link, i) => {
-              const x1=link.from.x, y1=link.from.y, x2=link.to.x, y2=link.to.y;
-              const dx=(x2-x1)*.35;
-              return <path key={"l"+i} className="cross-edge"
-                d={`M ${x1} ${y1} C ${x1+dx} ${y1-35}, ${x2-dx} ${y2+35}, ${x2} ${y2}`}/>;
-            })}
-
-            {filteredNodes.map(({node,x,y}) =>
-              <NodeCard key={node.id} node={node} x={x} y={y}
-                onOpen={openNode}
-                onAdd={parent => setModal({kind:"add", parent})}
-                onLinkStart={startLink}
-                onMoveStart={startMove}
-                onDelete={node => setModal({kind:"delete", node})}
-                linkingFrom={linkingFrom}
-                movingId={movingId}/>
-            )}
-          </svg>
-        </div>
-
+        <aside className="dashboard-rail">
+          <DashboardProgress tree={tree} stats={stats}/>
+          <DailyPlanner tree={tree} topics={collectNodes(tree)} onUpdate={updater=>setTree(updater)}/>
+          <div className="quick-card"><div className="rail-title"><span>QUICK ACTIONS</span><b>Tools</b></div><div className="quick-grid"><button onClick={()=>setModal({kind:"add",parent:tree})}><Plus/> Add node</button><button onClick={()=>setModal({kind:"settings"})}><Palette/> Change layout</button><button onClick={()=>setModal({kind:"link"})}><Link2/> Link topics</button><button onClick={()=>setModal({kind:"links"})}><Unlink2/> Remove link</button></div></div>
+        </aside>
         <div className="zoom-controls">
           <button onClick={()=>setZoom(z=>Math.min(1.4,+(z+.1).toFixed(2)))}>+</button>
           <span>{Math.round(zoom*100)}%</span>
@@ -398,8 +394,44 @@ function RoadmapApp({ initialRoadmaps, initialActiveId, onRoadmapsChange, onActi
       {modal?.kind==="links" && <LinksManager nodes={collectNodes(tree)} links={tree.links||[]} onClose={()=>setModal(null)} onRemove={removeCrossLink}/>}
       {modal?.kind==="delete" && <DeleteModal node={modal.node} onClose={()=>setModal(null)} onDelete={() => removeNode(modal.node.id)}/>}
       {modal?.kind==="roadmap-add" && <RoadmapAddModal onClose={()=>setModal(null)} onAdd={addRoadmap}/>}
+      {modal?.kind==="settings" && <RoadmapSettingsModal settings={tree.settings||{}} roadmapName={tree.name} onClose={()=>setModal(null)} onSave={saveRoadmapSettings}/>}
     </div>
   );
+}
+
+function DashboardProgress({tree, stats}) {
+  const pct = stats.total ? Math.round(stats.solved / stats.total * 100) : 0;
+  const pages = collectNodes(tree).filter(n=>n.type === "page").length;
+  const allProblems = [];
+  walk(tree, n => (n.page?.problems || []).forEach(p => allProblems.push(p)));
+  const byDifficulty = ["Easy","Medium","Hard"].map(d => {
+    const ps = allProblems.filter(p => p.difficulty === d);
+    return { d, total: ps.length, solved: ps.filter(p => p.solved).length };
+  });
+  return <section className="dashboard-progress">
+    <div className="rail-title"><span>PROGRESS</span><select value={tree.name} readOnly><option>{tree.name}</option></select></div>
+    <div className="progress-summary"><div><strong>{pct}%</strong><small>{stats.solved}/{stats.total} problems</small></div><div className="progress-ring" style={{"--p":`${pct}%`}}><b>{pct}%</b></div></div>
+    <div className="difficulty-list">{byDifficulty.map((item,i) => { const label=["Basic","Intermediate","Advanced"][i]; const w=item.total ? Math.round(item.solved/item.total*100) : 0; return <div className={`difficulty-row difficulty-${i}`} key={item.d}><div><span>{label}</span><b>{item.solved}/{item.total}</b></div><div className="difficulty-track"><i style={{width:`${w}%`}}/></div></div>; })}</div>
+    <div className="progress-meta"><span>{pages} learning pages</span><span>{collectNodes(tree).length} nodes</span></div>
+    <button className="detail-progress" onClick={()=>document.querySelector('.problem-section')?.scrollIntoView({behavior:'smooth'})}>View detailed progress <span>→</span></button>
+  </section>;
+}
+
+function RoadmapSettingsModal({settings, roadmapName, onClose, onSave}) {
+  const [layout,setLayout]=useState(settings.layout||"balanced");
+  const [nodeStyle,setNodeStyle]=useState(settings.nodeStyle||"coding");
+  const [accent,setAccent]=useState(settings.accent||"violet");
+  const [problemSet,setProblemSet]=useState(settings.problemSet||"NeetCode 150");
+  const [showDescriptions,setShowDescriptions]=useState(settings.showDescriptions ?? true);
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="modal settings-modal" onSubmit={e=>{e.preventDefault();onSave({layout,nodeStyle,accent,problemSet,showDescriptions})}} onMouseDown={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><h2>Customize {roadmapName}</h2><p>Each roadmap can have its own layout, colors and node style.</p></div><button type="button" className="close" onClick={onClose}><X/></button></div>
+    <div className="setting-section"><h4><LayoutDashboard size={16}/> Graph layout</h4><div className="choice-grid">{[["compact","Compact","More topics on screen"],["balanced","Balanced","Default study view"],["wide","Wide","More space between branches"]].map(([v,t,d])=><button type="button" className={layout===v?"choice active":"choice"} onClick={()=>setLayout(v)} key={v}><b>{t}</b><small>{d}</small></button>)}</div></div>
+    <div className="setting-section"><h4><Palette size={16}/> Node style</h4><div className="choice-grid">{[["coding","Coding","IDE / DSA style"],["aptitude","Aptitude","Warm exam-prep style"],["classic","Classic","Simple roadmap cards"]].map(([v,t,d])=><button type="button" className={nodeStyle===v?"choice active":"choice"} onClick={()=>setNodeStyle(v)} key={v}><span className={`style-preview ${v}`}/><b>{t}</b><small>{d}</small></button>)}</div></div>
+    <div className="setting-section"><h4>Accent</h4><div className="accent-picker">{["violet","blue","amber","green","cyan","rose"].map(v=><button type="button" key={v} className={`accent-dot ${v} ${accent===v?"selected":""}`} onClick={()=>setAccent(v)} aria-label={v}/>)}</div></div>
+    <div className="setting-section"><h4>Problem set / source</h4><select className="setting-select" value={problemSet} onChange={e=>setProblemSet(e.target.value)}><option>NeetCode 150</option><option>Blind 75</option><option>My Custom Set</option></select></div>
+    <label className="toggle-row"><span><b>Show node descriptions</b><small>Display a small context line inside each node.</small></span><input type="checkbox" checked={showDescriptions} onChange={e=>setShowDescriptions(e.target.checked)}/></label>
+    <button className="primary" type="submit"><Check size={17}/> Save roadmap style</button>
+  </form></div>;
 }
 
 function DailyPlanner({tree, topics, onUpdate}) {
@@ -527,10 +559,15 @@ function AddModal({parent,onClose,onAdd}) {
 
 function EditModal({node,onClose,onSave}) {
   const [name,setName]=useState(node.name);
-  return <div className="modal-backdrop" onMouseDown={onClose}><form className="modal" onSubmit={e=>{e.preventDefault();if(name.trim())onSave(node.id,name.trim())}} onMouseDown={e=>e.stopPropagation()}>
-    <div className="modal-head"><div><h2>Rename node</h2><p>Change the roadmap label.</p></div><button type="button" className="close" onClick={onClose}><X/></button></div>
+  const [description,setDescription]=useState(node.description || "");
+  const [nodeStyle,setNodeStyle]=useState(node.nodeStyle || "inherit");
+  const submit=e=>{e.preventDefault();if(name.trim())onSave(node.id,{name:name.trim(),description:description.trim(),nodeStyle:nodeStyle==="inherit"?undefined:nodeStyle})};
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="modal node-edit-modal" onSubmit={submit} onMouseDown={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><h2>Customize node</h2><p>Override the roadmap style for this node, or keep the roadmap default.</p></div><button type="button" className="close" onClick={onClose}><X/></button></div>
     <label>Node name<input autoFocus value={name} onChange={e=>setName(e.target.value)}/></label>
-    <button className="primary" type="submit"><Check size={17}/> Save</button>
+    <label>Description / subtitle<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="e.g. Traversal, patterns & practice"/></label>
+    <label>Node style<select value={nodeStyle} onChange={e=>setNodeStyle(e.target.value)}><option value="inherit">Use roadmap style</option><option value="coding">Coding</option><option value="aptitude">Aptitude</option><option value="classic">Classic</option></select></label>
+    <button className="primary" type="submit"><Check size={17}/> Save node</button>
   </form></div>;
 }
 
@@ -554,7 +591,7 @@ function LinksManager({nodes, links, onClose, onRemove}) {
   </div></div>;
 }
 
-function PageView({node,allNodes,onBack,onUpdate}) {
+function PageView({node,roadmapSettings = {},allNodes,onBack,onUpdate}) {
   const [problemModal,setProblemModal]=useState(false), [menu,setMenu]=useState(null), [editing,setEditing]=useState(null);
   const problems=node.page?.problems||[];
   const solved=problems.filter(p=>p.solved).length;
@@ -608,7 +645,7 @@ function PageView({node,allNodes,onBack,onUpdate}) {
           </div>
         </section>
       </main>
-      <ProgressSidebar problems={problems}/>
+      <ProgressSidebar problems={problems} settings={roadmapSettings}/>
     </div>
 
     {problemModal&&<ProblemModal onClose={()=>setProblemModal(false)} onAdd={p=>{update(page=>({problems:[...page.problems,p]}));setProblemModal(false)}}/>}
@@ -616,9 +653,9 @@ function PageView({node,allNodes,onBack,onUpdate}) {
   </div>;
 }
 
-function ProgressSidebar({problems}) {
+function ProgressSidebar({problems, settings = {}}) {
   const [month,setMonth]=useState(new Date());
-  const [source,setSource]=useState("NeetCode 150");
+  const [source,setSource]=useState(settings.problemSet || "NeetCode 150");
   const [activity,setActivity]=useState(()=>{try{return JSON.parse(localStorage.getItem("dsa-activity")||"[]")}catch{return[]}});
   useEffect(()=>{
     const fn=()=>{try{setActivity(JSON.parse(localStorage.getItem("dsa-activity")||"[]"))}catch{}};
@@ -802,16 +839,30 @@ function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const [startupError, setStartupError] = useState("");
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) {
+        setStartupError(error.message || "Could not connect to Supabase.");
+        setLoading(false);
+        return;
+      }
       setSession(data.session || null);
+      setLoading(false);
+    }).catch(error => {
+      if (!mounted) return;
+      setStartupError(error?.message || "Could not connect to Supabase. Check your .env values.");
       setLoading(false);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
-    return () => listener.subscription.unsubscribe();
+    return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
 
   if (loading) return <div className="auth-shell"><div className="auth-card sync-card"><div className="auth-mark">DSA</div><h1>Starting…</h1><p>Checking your private session.</p></div></div>;
+  if (startupError) return <div className="auth-shell"><div className="auth-card sync-card"><div className="auth-mark">!</div><h1>Supabase connection error</h1><p>{startupError}</p><p style={{marginTop:12}}>Check that <b>VITE_SUPABASE_URL</b> and <b>VITE_SUPABASE_PUBLISHABLE_KEY</b> are present in <b>.env</b>, then restart <b>npm run dev</b>.</p></div></div>;
   return session ? <SyncShell session={session} /> : <AuthScreen />;
 }
 
